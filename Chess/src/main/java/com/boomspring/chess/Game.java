@@ -261,15 +261,12 @@ final class Game {
                         Collections.swap(copy, positionTo - 2, positionTo + 1);
                         break;
                 }
-                // DEFAULT ACTION
-                copy.set(positionTo, updateCounter.apply(copy.get(positionTo)));
-
-            } else if (copy.get(positionTo).getPiece().map(Piece::getPlayer).isPresent()) {
-                // OTHER PIECES OR PAWN STRAIGHT
-                if (permanentMove) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(positionTo).getPiece().orElseThrow()));
+                // DEFAULT KING ACTION
                 copy.set(positionTo, removePiece.andThen(updateCounter).apply(copy.get(positionTo)));
+
             } else {
-                copy.set(positionTo, updateCounter.apply(copy.get(positionTo)));
+                if (copy.get(positionTo).getPiece().map(Piece::getPlayer).isPresent() && permanentMove) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(positionTo).getPiece().orElseThrow()));
+                copy.set(positionTo, removePiece.andThen(updateCounter).apply(copy.get(positionTo)));
             }
 
             copy.set(positionFrom, updateCounter.apply(copy.get(positionFrom)));
