@@ -6,7 +6,7 @@
 
   <groupId>com.boomspring</groupId>
   <artifactId>chess</artifactId>
-  <version>1.2</version>
+  <version>2</version>
   <packaging>jar</packaging>
 
 

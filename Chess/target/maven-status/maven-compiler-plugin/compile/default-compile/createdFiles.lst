@@ -2,6 +2,7 @@ com\boomspring\chess\Piece$Bishop.class
 com\boomspring\chess\Game$UI$1.class
 com\boomspring\chess\QuadPredicate.class
 com\boomspring\chess\Colour.class
+com\boomspring\chess\Game$UI$Promotion$1.class
 com\boomspring\chess\Game$UI.class
 com\boomspring\chess\Game.class
 com\boomspring\chess\Player.class
@@ -11,6 +12,7 @@ com\boomspring\chess\Rules.class
 com\boomspring\chess\Piece$Rook.class
 com\boomspring\chess\Piece$Knight.class
 com\boomspring\chess\Game$Turn.class
+com\boomspring\chess\Game$UI$Promotion.class
 com\boomspring\chess\Piece$Queen.class
 com\boomspring\chess\Game$Tile.class
 com\boomspring\chess\Piece$Pawn.class

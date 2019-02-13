@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.SwingConstants;
@@ -93,9 +94,7 @@ final class Game {
                             }, () -> {
                                 System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getNextPlayer().getColor() + " WINS!");
                             });
-
                     }
-
                 }, () -> {
                     System.out.println("CANNOT PERFORM MOVE!");
                 });
@@ -187,7 +186,6 @@ final class Game {
             this.setLayout(new GridLayout(8, 8));
             this.setMinimumSize(new Dimension(350, 350));
             this.setLocationRelativeTo(null);
-            this.setAlwaysOnTop(true);
             this.setDefaultCloseOperation(EXIT_ON_CLOSE);
 
             IntStream.range(0, 64)
@@ -268,7 +266,54 @@ final class Game {
          * @return {@link ImmutableList}<{@link Game.Tile Tile}>
          */
         private final <T extends JComponent> ImmutableList<T> getComponents(final Container container, final Class<T> component) {
-            return Arrays.stream(UI.this.getContentPane().getComponents()).filter(component::isInstance).map(component::cast).collect(ImmutableList.toImmutableList());
+            return Arrays.stream(container.getComponents()).filter(component::isInstance).map(component::cast).collect(ImmutableList.toImmutableList());
+        }
+
+        private final class Promotion extends JDialog {
+            private static final long serialVersionUID = 1L;
+            private final AtomicReference<Piece> stored = new AtomicReference<>();
+            private Promotion(final Player player) {
+                super(Game.UI.this, "Promotion", true);
+                this.setLayout(new GridLayout(2, 2));
+                this.setMinimumSize(new Dimension(350, 200));
+                this.setLocationRelativeTo(null);
+                this.setAlwaysOnTop(true);
+                this.setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+
+                IntStream.range(0, 4).mapToObj(i -> {
+                    return Map.of(0, "ROOK", 1, "KNIGHT", 2, "BISHOP", 3, "QUEEN").getOrDefault(i, "--");
+                }).map(JLabel::new).peek(this::add).forEach(label -> {
+                    label.setHorizontalAlignment(SwingConstants.CENTER);
+                    label.setVerticalAlignment(SwingConstants.CENTER);
+                    label.addMouseListener(new MouseAdapter() {
+                        public final void mouseEntered(final MouseEvent e) {
+                            label.setOpaque(true);
+                            label.setBackground(Color.PINK);
+                            label.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                        }
+
+                        public final void mouseExited(final MouseEvent e) {
+                            UI.this.getComponents(Promotion.this.getContentPane(), JLabel.class).forEach(label -> {
+                                label.setOpaque(false);
+                                label.setBackground(null);
+                                label.setCursor(Cursor.getDefaultCursor());
+                            });
+                        }
+
+                        public final void mouseClicked(final MouseEvent e) {
+                            stored.set(Map.of("ROOK", new Piece.Rook(player), "KNIGHT", new Piece.Knight(player), "BISHOP", new Piece.Bishop(player), "QUEEN", new Piece.Queen(player)).get(label.getText()));
+                            Promotion.this.dispose();
+                        }
+                    });
+                });
+
+                this.pack();
+                this.setVisible(true);
+            }
+
+            private final Piece getStored() {
+                return stored.get();
+            }
         }
     }
 
@@ -364,10 +409,10 @@ final class Game {
                     .flatMap(Tile::getPiece).filter(Piece.Pawn.class::isInstance)
                     .map(Piece::getPlayer).filter(getCurrentPlayer()::equals).ifPresent(player -> {
 
-                // TODO
-                // ALLOW TO CHANGE PROMOTION TYPE
-                System.out.println("PROMOTED " + getCurrentPlayer().getColor() + " PAWN TO A QUEEN!");
-                copy.set(positionTo, new Tile(new Piece.Queen(player), copy.get(positionTo).counter));
+                final var dialog = Game.this.ui.new Promotion(player).getStored();
+
+                System.out.println("PROMOTED " + getCurrentPlayer().getColor() + " PAWN TO A " + dialog.getClass().getSimpleName().toUpperCase() + "!");
+                copy.set(positionTo, new Tile(dialog, copy.get(positionTo).counter));
             });
 
             this.state = ImmutableList.copyOf(copy);
