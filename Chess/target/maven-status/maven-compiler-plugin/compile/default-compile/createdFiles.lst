@@ -1,4 +1,3 @@
-com\boomspring\chess\Assistance.class
 com\boomspring\chess\Piece$Bishop.class
 com\boomspring\chess\Game$UI$1.class
 com\boomspring\chess\QuadPredicate.class
@@ -8,6 +7,7 @@ com\boomspring\chess\Game.class
 com\boomspring\chess\Player.class
 com\boomspring\chess\Piece$King.class
 com\boomspring\chess\Piece.class
+com\boomspring\chess\Rules.class
 com\boomspring\chess\Piece$Rook.class
 com\boomspring\chess\Piece$Knight.class
 com\boomspring\chess\Game$Turn.class
