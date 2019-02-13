@@ -49,7 +49,7 @@ abstract class Piece implements Rules {
 
         @Override
         public final boolean boardException(final int position, final int vector) {
-            return !ImmutableMultimap.<Integer, Integer>builder().put(0, -1).put(7, 1).build().containsEntry(position % 8, vector);
+            return !ImmutableMultimap.<Integer, Integer>builder().put(0, -1).put(7, 1).build().containsEntry(Game.getFile(position), vector);
         }
     }
 
@@ -60,7 +60,7 @@ abstract class Piece implements Rules {
 
         @Override
         public final boolean boardException(final int position, final int vector) {
-            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 15, 6, -10, -17).putAll(1, 6, -10).putAll(6, 10, -6).putAll(7, 17, 10, -6, -15).build().containsEntry(position % 8, vector);
+            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 15, 6, -10, -17).putAll(1, 6, -10).putAll(6, 10, -6).putAll(7, 17, 10, -6, -15).build().containsEntry(Game.getFile(position), vector);
         }
     }
 
@@ -71,7 +71,7 @@ abstract class Piece implements Rules {
 
         @Override
         public final boolean boardException(final int position, final int vector) {
-            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -9).putAll(7, 9, -7).build().containsEntry(position % 8, vector);
+            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -9).putAll(7, 9, -7).build().containsEntry(Game.getFile(position), vector);
         }
     }
 
@@ -82,7 +82,7 @@ abstract class Piece implements Rules {
 
         @Override
         public final boolean boardException(final int position, final int vector) {
-            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -1, -9).putAll(7, 9, 1, -7).build().containsEntry(position % 8, vector);
+            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -1, -9).putAll(7, 9, 1, -7).build().containsEntry(Game.getFile(position), vector);
         }
     }
 
@@ -93,20 +93,7 @@ abstract class Piece implements Rules {
 
         @Override
         public final boolean boardException(final int position, final int vector) {
-            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -1, -9).putAll(7, 9, 1, -7).build().containsEntry(position % 8, vector);
-        }
-
-        @Override
-        public final QuadPredicate<Game.Turn, Integer, Integer, Integer> noCheck() {
-            return (turn, positionFrom, counter, vector) -> {
-                if (this.getPlayer().equals(turn.getGame().getCurrentPlayer())) {
-                    // IS ORIGINAL POSITION IN CHECK
-                    if (counter.equals(1) && turn.getGame().getPlayerMoves(turn.getGame().getCurrentTurn(), turn.getGame().getNextPlayer()).anyMatch(positionFrom::equals)) return false;
-
-                    // IS NEW POSITION IN CHECK
-                    return turn.getGame().getPlayerMoves(turn.temporaryTurn(positionFrom, positionFrom + (vector * (counter + 1))), turn.getGame().getNextPlayer()).noneMatch(i -> positionFrom + (vector * (counter + 1)) == i);
-                } else return true;
-            };
+            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -1, -9).putAll(7, 9, 1, -7).build().containsEntry(Game.getFile(position), vector);
         }
 
         @Override
@@ -137,13 +124,13 @@ abstract class Piece implements Rules {
 
         @Override
         public final boolean boardException(final int position, final int vector) {
-            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -9).putAll(7, 9, -7).build().containsEntry(position % 8, vector);
+            return !ImmutableMultimap.<Integer, Integer>builder().putAll(0, 7, -9).putAll(7, 9, -7).build().containsEntry(Game.getFile(position), vector);
         }
 
         @Override
         public final QuadPredicate<Game.Turn, Integer, Integer, Integer> noCollide() {
             return (turn, positionFrom, counter, vector) -> {
-                if (vector % 8 == 0) {
+                if (Game.getFile(vector) == 0) {
                     return turn.getState().get(positionFrom + (vector * (counter + 1))).getPiece().isEmpty();
                 } else return turn.getState().get(positionFrom + (vector * (counter + 1))).getPiece().map(Piece::getPlayer).or(() -> {
                     return Optional.of(turn.getState().get((positionFrom + (vector * (counter + 1))) + Map.of(9, -8, 7, -8, -7, 8, -9, 8).get(vector)))
@@ -158,7 +145,7 @@ abstract class Piece implements Rules {
         @Override
         public final QuadPredicate<Game.Turn, Integer, Integer, Integer> noError() {
             return (turn, positionFrom, counter, vector) -> {
-                return counter < (turn.getState().get(positionFrom).getCounter().isEmpty() && vector % 8 == 0 ? 2 : 1);
+                return counter < (turn.getState().get(positionFrom).getCounter().isEmpty() && Game.getFile(vector) == 0 ? 2 : 1);
             };
         }
     }

@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -38,7 +37,7 @@ import com.google.common.primitives.ImmutableIntArray;
  */
 final class Game {
     public static void main(final String... args) {
-        final var game = new Game(ImmutableIntArray.of());
+        new Game(ImmutableIntArray.of());
     }
 
     private final ImmutableList<Player> players = ImmutableList.of(new Player(Colour.BLACK), new Player(Colour.WHITE));
@@ -75,33 +74,30 @@ final class Game {
                     // CHECK / CHECKMATE / STALEMATE
                     switch((int) getPlayerMoves(getCurrentTurn(), getNextPlayer()).filter(position -> position == kingPosition).count()) {
                         case 0:
-                            if (getPlayerMoves(getCurrentTurn(), getCurrentPlayer()).count() == 0) {
-                                // STALEMATE
-                                System.out.println("STALEMATE!");
-                            }
+                            getPlayerMoves(getCurrentTurn(), getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
+                                System.out.println("TURN " + (turns.size() - 1) + ": SUCCESSFUL!");
+                            }, () -> {
+                                System.out.println("TURN " + (turns.size() - 1) + ": STALEMATE!");
+                            });
                             break;
                         case 1:
-                            if (getPlayerMoves(getCurrentTurn(), getCurrentPlayer()).count() == 0) {
-                                // OLD PLAYER WINS
-                                System.out.println("PLAYER " + getNextPlayer().getColor() + " WINS!");
-                            } else {
-                                // NEW PLAYER IS IN CHECK
-                                System.out.println("PLAYER " + getCurrentPlayer().getColor() + " IS IN CHECK!");
-                            }
+                            getPlayerMoves(getCurrentTurn(), getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
+                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getCurrentPlayer().getColor() + " IS IN CHECK!");
+                            }, () -> {
+                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getNextPlayer().getColor() + " WINS!");
+                            });
                             break;
                         default:
-                            if (getMoves(getCurrentTurn(), kingPosition).count() == 0) {
-                                // OLD PLAYER WINS
-                                System.out.println("PLAYER " + getNextPlayer().getColor() + " WINS!");
-                            } else {
-                                // NEW PLAYER IS IN CHECK
-                                System.out.println("PLAYER " + getCurrentPlayer().getColor() + " IS IN CHECK!");
-                            }
+                            getMoves(getCurrentTurn(), kingPosition).findAny().ifPresentOrElse(x -> {
+                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getCurrentPlayer().getColor() + " IS IN CHECK!");
+                            }, () -> {
+                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getNextPlayer().getColor() + " WINS!");
+                            });
 
                     }
 
                 }, () -> {
-                    System.out.println("Cannot Perform Move");
+                    System.out.println("CANNOT PERFORM MOVE!");
                 });
     }
 
@@ -144,13 +140,36 @@ final class Game {
     final IntStream getMoves(final Turn turn, final int positionFrom) {
         return turn.state.get(positionFrom).getPiece().map(piece -> {
             return piece.getVectors().flatMap(vector -> {
-                final var counter = new AtomicInteger();
 
-                return IntStream.iterate(positionFrom + vector, Range.closedOpen(0, 64)::contains, x -> x + vector)
+                try(final var stream = IntStream.iterate(positionFrom + vector, Range.closedOpen(0, 64)::contains, x -> x + vector)
                         .takeWhile(i -> piece.boardException(i - vector, vector))
-                        .takeWhile(i -> piece.noCollide().and(piece.noError()).and(piece.noCheck()).test(turn, positionFrom, counter.getAndIncrement(), vector));
+                        .takeWhile(i -> piece.noCollide().and(piece.noError()).test(turn, positionFrom, ((i - positionFrom) / vector) - 1, vector))) {
+
+                    // Now Works for Rooks, Bishops and Queens
+                    if (Piece.King.class.isInstance(piece)) {
+                        return stream.takeWhile(i -> piece.noCheck().test(turn, positionFrom, ((i - positionFrom) / vector) - 1, vector));
+                    } else {
+                        return stream.filter(i -> piece.noCheck().test(turn, positionFrom, ((i - positionFrom) / vector) - 1, vector));
+                    }
+                }
             }).sorted().distinct();
         }).orElse(IntStream.empty());
+    }
+
+    /**
+     * Columns of Board
+     * @return
+     */
+    public static final int getFile(final int position) {
+        return position % 8;
+    }
+
+    /**
+     * Rows of Board
+     * @return
+     */
+    public static final int getRank(final int position) {
+        return position / 8;
     }
 
     /**
@@ -294,7 +313,7 @@ final class Game {
 
             final var copy = Lists.newArrayList(getCurrentTurn().state);
 
-            if (copy.get(positionFrom).getPiece().filter(Piece.Pawn.class::isInstance).isPresent() && (positionTo - positionFrom) % 8 != 0) { // DIAGONAL PAWN MOVE
+            if (copy.get(positionFrom).getPiece().filter(Piece.Pawn.class::isInstance).isPresent() && getFile(positionTo - positionFrom) != 0) { // DIAGONAL PAWN MOVE
                 final var passant = positionTo + Map.of(9, -8, 7, -8, -7, 8, -9, 8).getOrDefault(positionTo - positionFrom, 0);
 
                 if (copy.get(positionTo).getPiece().map(Piece::getPlayer).isPresent()) { // NORMAL DIAGONAL
@@ -305,7 +324,7 @@ final class Game {
                         .filter(i -> i.getCounter().filter(x -> turns.size() - x == 1).isPresent())
                         .flatMap(Game.Tile::getPiece)
                         .filter(Piece.Pawn.class::isInstance).map(Piece::getPlayer)
-                        .filter(i -> positionFrom / 8 == i.getColor().ordinal() + 3)
+                        .filter(i -> getRank(positionFrom) == i.getColor().ordinal() + 3)
                         .filter(getNextPlayer()::equals).isPresent()) { // ENPASSANT DIAGONAL
 
                     ui.getComponents(ui.getContentPane(), JLabel.class).get(passant).setOpaque(true);
@@ -339,6 +358,17 @@ final class Game {
 
             copy.set(positionFrom, updateCounter.apply(copy.get(positionFrom)));
             Collections.swap(copy, positionFrom, positionTo);
+
+            // PAWN PROMOTION
+            Optional.of(positionTo).filter(p -> permanentMove).filter(p -> Game.getRank(p) == Map.of(Colour.BLACK, 7, Colour.WHITE, 0).get(getCurrentPlayer().getColor())).map(copy::get)
+                    .flatMap(Tile::getPiece).filter(Piece.Pawn.class::isInstance)
+                    .map(Piece::getPlayer).filter(getCurrentPlayer()::equals).ifPresent(player -> {
+
+                // TODO
+                // ALLOW TO CHANGE PROMOTION TYPE
+                System.out.println("PROMOTED " + getCurrentPlayer().getColor() + " PAWN TO A QUEEN!");
+                copy.set(positionTo, new Tile(new Piece.Queen(player), copy.get(positionTo).counter));
+            });
 
             this.state = ImmutableList.copyOf(copy);
         }

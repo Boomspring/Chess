@@ -18,7 +18,10 @@ interface Rules {
 
     default QuadPredicate<Game.Turn, Integer, Integer, Integer> noCheck() {
         return (turn, positionFrom, counter, vector) -> {
-            return (turn.getState().get(positionFrom).getPiece().orElseThrow().getPlayer().equals(turn.getGame().getCurrentPlayer()) ? turn.getGame().getPlayerMoves(turn.temporaryTurn(positionFrom, positionFrom + (vector * (counter + 1))), turn.getGame().getNextPlayer()).noneMatch(i -> i == turn.getPosition(Piece.King.class, turn.getGame().getCurrentPlayer()).orElseThrow()) : true);
+            if (turn.getState().get(positionFrom).getPiece().orElseThrow().getPlayer().equals(turn.getGame().getCurrentPlayer())) {
+                final var temporary = turn.temporaryTurn(positionFrom, positionFrom + (vector * (counter + 1)));
+                return turn.getGame().getPlayerMoves(temporary, turn.getGame().getNextPlayer()).noneMatch(x -> x == temporary.getPosition(Piece.King.class, turn.getGame().getCurrentPlayer()).orElseThrow());
+            } else return true;
         };
     }
 
