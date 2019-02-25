@@ -6,13 +6,9 @@
 
   <groupId>com.boomspring</groupId>
   <artifactId>chess</artifactId>
-  <version>2</version>
-  <packaging>jar</packaging>
+  <version>1</version>
 
-
-  <name>chess</name>
-  <!-- FIXME change it to the project's website -->
-  <url>http://www.example.com</url>
+  <name>Operation AI</name>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -22,9 +18,9 @@
 
   <dependencies>
     <dependency>
-        <groupId>com.google.guava</groupId>
-        <artifactId>guava</artifactId>
-        <version>27.0.1-jre</version>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>25.1-jre</version>
     </dependency>
   </dependencies>
 
@@ -77,7 +73,7 @@
                   <configuration>
                       <archive>
                       <manifest>
-                          <mainClass>com.boomspring.chess.Game</mainClass>
+                          <mainClass>com.boomspring.chess.UI</mainClass>
                       </manifest>
                       </archive>
                       <descriptorRefs>

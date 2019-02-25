@@ -1,393 +1,166 @@
 package com.boomspring.chess;
 
-import java.awt.Color;
-import java.awt.Container;
-import java.awt.Cursor;
-import java.awt.Dimension;
-import java.awt.GridLayout;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.IntStream;
-
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.SwingConstants;
+import java.util.stream.Stream;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.google.common.primitives.ImmutableIntArray;
 
-/**
- * The essential class in the program.
- */
-final class Game {
-    public static void main(final String... args) {
-        new Game(ImmutableIntArray.of());
-    }
+public final class Game
+{
+    private final ImmutableList<Player> players = ImmutableList.of(new Player.Human(Colour.BLACK), new Player.Human(Colour.WHITE));
+    private final ArrayList<Turn> turns = new ArrayList<>(List.of(new Turn()));
+    private final AtomicReference<String> status = new AtomicReference<>();
+    private final AtomicBoolean ended = new AtomicBoolean();
 
-    private final ImmutableList<Player> players = ImmutableList.of(new Player(Colour.BLACK), new Player(Colour.WHITE));
-    private final ArrayList<Turn> turns = Lists.newArrayList(new Turn());
-    private final UI ui = new UI("Chess");
-
-    /**
-     * Starts the {@link Game} with predetermined {@link Game.Turn Turns}
-     *
-     * @see ImmutableIntArray
-     */
-    private Game(final ImmutableIntArray values) {
-        Lists.partition(values.subArray(0, values.length() & ~(1 << 0)).asList(), 2).forEach(move -> {
-            this.makeMove(move.get(0), move.get(1));
-        });
-    }
-
-    /**
-     * Attempts to perform a legal Chess move
-     *
-     * @param positionFrom - Original Location
-     * @param positionTo   - New Location
-     */
-    private final void makeMove(final int positionFrom, final int positionTo) {
-        getCurrentTurn().state.get(positionFrom).getPiece().map(Piece::getPlayer)
-                .filter(getCurrentPlayer()::equals)
-                .filter(i -> getMoves(getCurrentTurn(), positionFrom).anyMatch(Integer.valueOf(positionTo)::equals))
-                .ifPresentOrElse(i -> {
-                    turns.add(new Turn(positionFrom, positionTo, true));
-                    ui.reset.accept(ui.getComponents(ui.getContentPane(), JLabel.class));
-
-                    final var kingPosition = getCurrentTurn().getPosition(Piece.King.class, getCurrentPlayer()).orElseThrow();
+    public final void makeMove(final int positionFrom, final int positionTo) {
+        this.getCurrentTurn().board.get(positionFrom).getPiece().map(Piece::getPlayer)
+            .filter(getCurrentPlayer()::equals)
+            .flatMap(i -> this.getCurrentTurn().getPotentialTurns(positionFrom).filter(t -> t.getPositionTo().equals(positionTo)).findFirst())
+            .map(i -> new Turn(positionFrom, positionTo, true))
+            .ifPresentOrElse(i -> {
+                turns.add(i);
+                final var kingPosition = getCurrentTurn().getPosition(Piece.King.class, getCurrentPlayer()).orElseThrow();
 
                     // CHECK / CHECKMATE / STALEMATE
-                    switch((int) getPlayerMoves(getCurrentTurn(), getNextPlayer()).filter(position -> position == kingPosition).count()) {
+                    switch((int) getCurrentTurn().getPotentialTurns(getNextPlayer()).mapToInt(Game.Turn::getPositionTo).filter(position -> position == kingPosition).count()) {
                         case 0:
-                            getPlayerMoves(getCurrentTurn(), getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
-                                System.out.println("TURN " + (turns.size() - 1) + ": SUCCESSFUL!");
+                            getCurrentTurn().getPotentialTurns(getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
+                                status.set("Turn " + (turns.size() - 1) + ": Successful");
                             }, () -> {
-                                System.out.println("TURN " + (turns.size() - 1) + ": STALEMATE!");
+                                status.set("Turn " + (turns.size() - 1) + ": Successful");
                             });
                             break;
                         case 1:
-                            getPlayerMoves(getCurrentTurn(), getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
-                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getCurrentPlayer().getColor() + " IS IN CHECK!");
+                            getCurrentTurn().getPotentialTurns(getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
+                                status.set("Turn " + (turns.size() - 1) + ": Player " + getCurrentPlayer().getColour() + " is in Check");
                             }, () -> {
-                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getNextPlayer().getColor() + " WINS!");
+                                status.set("Turn " + (turns.size() - 1) + ": Player " + getNextPlayer().getColour() + " Wins");
+                                ended.set(true);
                             });
                             break;
                         default:
-                            getMoves(getCurrentTurn(), kingPosition).findAny().ifPresentOrElse(x -> {
-                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getCurrentPlayer().getColor() + " IS IN CHECK!");
+                            getCurrentTurn().getPotentialTurns(kingPosition).findAny().ifPresentOrElse(x -> {
+                                status.set("Turn " + (turns.size() - 1) + ": Player " + getCurrentPlayer().getColour() + " is in Check");
                             }, () -> {
-                                System.out.println("TURN " + (turns.size() - 1) + ": PLAYER " + getNextPlayer().getColor() + " WINS!");
+                                status.set("Turn " + (turns.size() - 1) + ": Player " + getNextPlayer().getColour() + " Wins");
+                                ended.set(true);
                             });
                     }
-                }, () -> {
-                    System.out.println("CANNOT PERFORM MOVE!");
-                });
+            }, IllegalArgumentException::new);
     }
 
-    final Player getCurrentPlayer() {
+    public final ImmutableList<Player> getPlayers()
+    {
+        return players;
+    }
+
+    public final Player getCurrentPlayer()
+    {
         return players.get(turns.size() % 2);
     }
 
-    final Player getNextPlayer() {
+    public final Player getNextPlayer()
+    {
         return players.get((turns.size() + 1) % 2);
     }
 
-    final ImmutableList<Turn> getTurns() {
+    public final ImmutableList<Turn> getTurns()
+    {
         return ImmutableList.copyOf(turns);
     }
 
-    final Turn getCurrentTurn() {
-        return Iterables.getLast(turns);
+    public final Turn getCurrentTurn()
+    {
+        return turns.get(turns.size() - 1);
     }
 
-    /**
-     * Obtains all the positions a {@link Player} can move to
-     *
-     * @param turn   - Includes temporary
-     * @param player - Person
-     * @return - All possible positions
-     */
-    final IntStream getPlayerMoves(final Turn turn, final Player player) {
-        return IntStream.range(0, 64)
-                .filter(i -> turn.state.get(i).getPiece().map(Piece::getPlayer).filter(player::equals).isPresent())
-                .flatMap(i -> this.getMoves(turn, i));
+    public final Boolean hasEnded()
+    {
+        return ended.get();
     }
 
-    /**
-     * Obtains all the positions a {@link Piece} can move to
-     *
-     * @param turn - Includes temporary
-     * @param positionFrom - Original location
-     * @return - All possible positions
-     */
-    final IntStream getMoves(final Turn turn, final int positionFrom) {
-        return turn.state.get(positionFrom).getPiece().map(piece -> {
-            return piece.getVectors().flatMap(vector -> {
-
-                try(final var stream = IntStream.iterate(positionFrom + vector, Range.closedOpen(0, 64)::contains, x -> x + vector)
-                        .takeWhile(i -> piece.boardException(i - vector, vector))
-                        .takeWhile(i -> piece.noCollide().and(piece.noError()).test(turn, positionFrom, ((i - positionFrom) / vector) - 1, vector))) {
-
-                    // Now Works for Rooks, Bishops and Queens
-                    if (Piece.King.class.isInstance(piece)) {
-                        return stream.takeWhile(i -> piece.noCheck().test(turn, positionFrom, ((i - positionFrom) / vector) - 1, vector));
-                    } else {
-                        return stream.filter(i -> piece.noCheck().test(turn, positionFrom, ((i - positionFrom) / vector) - 1, vector));
-                    }
-                }
-            }).sorted().distinct();
-        }).orElse(IntStream.empty());
+    public final String getStatus()
+    {
+        return status.get();
     }
 
-    /**
-     * Columns of Board
-     * @return
-     */
-    public static final int getFile(final int position) {
-        return position % 8;
-    }
-
-    /**
-     * Rows of Board
-     * @return
-     */
-    public static final int getRank(final int position) {
-        return position / 8;
-    }
-
-    /**
-     * The visual elements of the {@link Game}.
-     */
-    private final class UI extends JFrame {
-        private static final long serialVersionUID = 1L;
-        private final AtomicReference<JComponent> stored = new AtomicReference<>();
-
-        /**
-         * Loads the interface
-         */
-        private UI(final String title) {
-            super(title);
-            this.setLayout(new GridLayout(8, 8));
-            this.setMinimumSize(new Dimension(350, 350));
-            this.setLocationRelativeTo(null);
-            this.setDefaultCloseOperation(EXIT_ON_CLOSE);
-
-            IntStream.range(0, 64)
-                    .mapToObj(i -> getCurrentTurn().state.get(i).getPiece().map(Piece::toString).orElse("--"))
-                    .map(JLabel::new).peek(this::add).forEach(label -> {
-                        label.setHorizontalAlignment(SwingConstants.CENTER);
-                        label.setVerticalAlignment(SwingConstants.CENTER);
-                        label.addMouseListener(new MouseAdapter() {
-                            public final void mouseEntered(final MouseEvent e) {
-                                reset.andThen(list -> {
-
-                                    if (getCurrentTurn().state.get(list.indexOf(label)).getPiece()
-                                            .map(Piece::getPlayer).filter(getCurrentPlayer()::equals)
-                                            .filter(x -> Objects.equals(stored.get(), null))
-                                            .map(x -> Game.this.getMoves(getCurrentTurn(), list.indexOf(label)))
-                                            .orElse(IntStream.empty())
-                                            .mapToObj(list::get)
-                                            .peek(label -> { // VALID MOVES
-
-                                                label.setOpaque(true);
-                                                label.setBackground(Color.RED);
-                                                label.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                                            })
-                                            .count() > 0) { // HOVER
-
-                                                label.setOpaque(true);
-                                                label.setBackground(Color.PINK);
-                                                label.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                                    };
-
-                                }).accept(UI.this.getComponents(getContentPane(), JLabel.class));
-                            }
-
-                            public final void mouseExited(final MouseEvent e) {
-                                reset.accept(UI.this.getComponents(getContentPane(), JLabel.class));
-                            }
-
-                            public final void mouseClicked(final MouseEvent e) {
-                                if (label.isOpaque()) {
-                                    if (Objects.equals(stored.get(), null)) { // NO VALUE
-                                        stored.set(label);
-                                    } else if (label.equals(stored.get())) { // RESET VALUE
-                                        stored.set(null);
-                                    } else { // NEW MOVE
-                                        final var list = UI.this.getComponents(getContentPane(), JLabel.class);
-                                        Game.this.makeMove(list.indexOf(stored.getAndSet(null)), list.indexOf(label));
-                                    }
-                                }
-                            }
-                        });
-                    });
-
-            this.pack();
-            this.setVisible(true);
-        }
-
-        /**
-         * Resets the interface
-         *
-         * Now limits resetting to only opaque regions
-         */
-        private final Consumer<ImmutableList<JLabel>> reset = list -> {
-            if (Objects.equals(stored.get(), null)) {
-                list.stream().filter(JLabel::isOpaque).forEach(label -> {
-                    label.setOpaque(false);
-                    label.setBackground(null);
-                    label.setCursor(Cursor.getDefaultCursor());
-                    label.setText(getCurrentTurn().state.get(list.indexOf(label)).getPiece().map(Piece::toString).orElse("--"));
-                    label.repaint();
-                });
-            }
-        };
-
-        /**
-         * Obtains all the {@link JLabel}, each representing a {@link Game.Tile Tile}
-         * @param container - Location
-         * @param component - Type
-         * @return {@link ImmutableList}<{@link Game.Tile Tile}>
-         */
-        private final <T extends JComponent> ImmutableList<T> getComponents(final Container container, final Class<T> component) {
-            return Arrays.stream(container.getComponents()).filter(component::isInstance).map(component::cast).collect(ImmutableList.toImmutableList());
-        }
-
-        private final class Promotion extends JDialog {
-            private static final long serialVersionUID = 1L;
-            private final AtomicReference<Piece> stored = new AtomicReference<>();
-            private Promotion(final Player player) {
-                super(Game.UI.this, "Promotion", true);
-                this.setLayout(new GridLayout(2, 2));
-                this.setMinimumSize(new Dimension(350, 200));
-                this.setLocationRelativeTo(null);
-                this.setAlwaysOnTop(true);
-                this.setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
-
-                IntStream.range(0, 4).mapToObj(i -> {
-                    return Map.of(0, "ROOK", 1, "KNIGHT", 2, "BISHOP", 3, "QUEEN").getOrDefault(i, "--");
-                }).map(JLabel::new).peek(this::add).forEach(label -> {
-                    label.setHorizontalAlignment(SwingConstants.CENTER);
-                    label.setVerticalAlignment(SwingConstants.CENTER);
-                    label.addMouseListener(new MouseAdapter() {
-                        public final void mouseEntered(final MouseEvent e) {
-                            label.setOpaque(true);
-                            label.setBackground(Color.PINK);
-                            label.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                        }
-
-                        public final void mouseExited(final MouseEvent e) {
-                            UI.this.getComponents(Promotion.this.getContentPane(), JLabel.class).forEach(label -> {
-                                label.setOpaque(false);
-                                label.setBackground(null);
-                                label.setCursor(Cursor.getDefaultCursor());
-                            });
-                        }
-
-                        public final void mouseClicked(final MouseEvent e) {
-                            stored.set(Map.of("ROOK", new Piece.Rook(player), "KNIGHT", new Piece.Knight(player), "BISHOP", new Piece.Bishop(player), "QUEEN", new Piece.Queen(player)).get(label.getText()));
-                            Promotion.this.dispose();
-                        }
-                    });
-                });
-
-                this.pack();
-                this.setVisible(true);
-            }
-
-            private final Piece getStored() {
-                return stored.get();
-            }
-        }
-    }
-
-    /**
-     * A move that can be evaluated.
-     */
-    final class Turn {
-        private final ImmutableList<Tile> state;
+    public final class Turn
+    {
         private final Integer positionFrom;
         private final Integer positionTo;
+        private final ImmutableList<Tile> board;
 
-        /**
-         * Initial
-         */
-        private Turn() {
+        public Turn()
+        {
             this.positionFrom = null;
             this.positionTo = null;
-            final var map = ImmutableMultimap.<Supplier<Piece>, Integer>builder()
-                    .putAll(() -> new Piece.Rook(players.get(0)), 0, 7)
-                    .putAll(() -> new Piece.Knight(players.get(0)), 1, 6)
-                    .putAll(() -> new Piece.Bishop(players.get(0)), 2, 5)
-                    .put(() -> new Piece.Queen(players.get(0)), 3)
-                    .put(() -> new Piece.King(players.get(0)), 4)
-                    .putAll(() -> new Piece.Pawn(players.get(0)), 8, 9, 10, 11, 12, 13, 14, 15)
-                    .putAll(() -> new Piece.Pawn(players.get(1)), 48, 49, 50, 51, 52, 53, 54, 55)
-                    .putAll(() -> new Piece.Rook(players.get(1)), 56, 63)
-                    .putAll(() -> new Piece.Knight(players.get(1)), 57, 62)
-                    .putAll(() -> new Piece.Bishop(players.get(1)), 58, 61)
-                    .put(() -> new Piece.Queen(players.get(1)), 59)
-                    .put(() -> new Piece.King(players.get(1)), 60)
-                    .build().inverse();
-
-            this.state = IntStream.range(0, 64).mapToObj(i -> Iterables.getFirst(map.get(i), () -> null).get()).map(Tile::new).collect(ImmutableList.toImmutableList());
+            this.board = IntStream.range(0, 64).mapToObj(i ->
+            {
+                switch(i)
+                {
+                    case 0: case 7: return new Piece.Rook(players.get(0));
+                    case 1: case 6: return new Piece.Knight(players.get(0));
+                    case 2: case 5: return new Piece.Bishop(players.get(0));
+                    case 3: return new Piece.Queen(players.get(0));
+                    case 4: return new Piece.King(players.get(0));
+                    case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: return new Piece.Pawn(players.get(0));
+                    case 48: case 49: case 50: case 51: case 52: case 53: case 54: case 55: return new Piece.Pawn(players.get(1));
+                    case 56: case 63: return new Piece.Rook(players.get(1));
+                    case 57: case 62: return new Piece.Knight(players.get(1));
+                    case 58: case 61: return new Piece.Bishop(players.get(1));
+                    case 59: return new Piece.Queen(players.get(1));
+                    case 60: return new Piece.King(players.get(1));
+                    default: return null;
+                }
+            }).map(Tile::new).collect(ImmutableList.toImmutableList());
         }
 
-        /**
-         * Temporary
-         */
-        private Turn(final int positionFrom, final int positionTo, final boolean permanentMove) {
+        private Turn(final int positionFrom, final int positionTo, final boolean permanent)
+        {
             this.positionFrom = positionFrom;
             this.positionTo = positionTo;
 
-            final var copy = Lists.newArrayList(getCurrentTurn().state);
+            final var copy = new ArrayList<>(getCurrentTurn().board);
 
-            if (copy.get(positionFrom).getPiece().filter(Piece.Pawn.class::isInstance).isPresent() && getFile(positionTo - positionFrom) != 0) { // DIAGONAL PAWN MOVE
+            if (copy.get(positionFrom).getPiece().filter(Piece.Pawn.class::isInstance).isPresent() && UI.getColumn(positionTo - positionFrom) != 0) { // DIAGONAL PAWN MOVE
                 final var passant = positionTo + Map.of(9, -8, 7, -8, -7, 8, -9, 8).getOrDefault(positionTo - positionFrom, 0);
 
                 if (copy.get(positionTo).getPiece().map(Piece::getPlayer).isPresent()) { // NORMAL DIAGONAL
-                    if (permanentMove) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(positionTo).getPiece().orElseThrow()));
-                    copy.set(positionTo, removePiece.andThen(updateCounter).apply(copy.get(positionTo)));
+                    if (permanent) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(positionTo).getPiece().orElseThrow()));
+                    copy.set(positionTo, copy.get(positionTo).updatePiece(null).updateCounter(turns.size()));
                 } else if (Optional.of(copy.get(passant))
-                        .filter(i -> Math.abs(getCurrentTurn().getPositionTo().orElse(0) - getCurrentTurn().getPositionFrom().orElse(0)) == 16)
+                        .filter(i -> Math.abs(getCurrentTurn().getPositionTo() - getCurrentTurn().getPositionFrom()) == 16)
                         .filter(i -> i.getCounter().filter(x -> turns.size() - x == 1).isPresent())
-                        .flatMap(Game.Tile::getPiece)
+                        .flatMap(x -> x.getPiece())
                         .filter(Piece.Pawn.class::isInstance).map(Piece::getPlayer)
-                        .filter(i -> getRank(positionFrom) == i.getColor().ordinal() + 3)
+                        .filter(i -> UI.getRow(positionFrom) == i.getColour().ordinal() + 3)
                         .filter(getNextPlayer()::equals).isPresent()) { // ENPASSANT DIAGONAL
 
-                    ui.getComponents(ui.getContentPane(), JLabel.class).get(passant).setOpaque(true);
-                    if (permanentMove) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(passant).getPiece().orElseThrow()));
-                    copy.set(passant, removePiece.andThen(updateCounter).apply(copy.get(passant)));
+                    //ui.getComponents(ui.board, JLabel.class).get(passant).setOpaque(true);
+                    if (permanent) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(passant).getPiece().orElseThrow()));
+                    copy.set(passant, copy.get(passant).updatePiece(null).updateCounter(turns.size()));
                 }
             } else { // OTHER MOVES
-                if (permanentMove) { // REAL MOVE
+                if (permanent) { // REAL MOVE
                     if (copy.get(positionFrom).getPiece().filter(Piece.King.class::isInstance).isPresent()) { // KING CASTLING
                         switch(positionTo - positionFrom) {
                             case 2: // RIGHT SIDE
-                                copy.set(positionTo + 1, updateCounter.apply(copy.get(positionTo + 1)));
-                                ui.getComponents(ui.getContentPane(), JLabel.class).get(positionTo + 1).setOpaque(true);
+                                copy.set(positionTo + 1, copy.get(positionTo + 1).updateCounter(turns.size()));
+                                //ui.getComponents(ui.board, JLabel.class).get(positionTo + 1).setOpaque(true);
                                 Collections.swap(copy, positionTo + 1, positionTo - 1);
                                 break;
                             case -2: // LEFT SIDE
-                                copy.set(positionTo - 2, updateCounter.apply(copy.get(positionTo - 2)));
-                                ui.getComponents(ui.getContentPane(), JLabel.class).get(positionTo -2).setOpaque(true);
+                                copy.set(positionTo - 2, copy.get(positionTo - 2).updateCounter(turns.size()));
+                                //ui.getComponents(ui.board, JLabel.class).get(positionTo -2).setOpaque(true);
                                 Collections.swap(copy, positionTo - 2, positionTo + 1);
                                 break;
                         }
@@ -398,79 +171,71 @@ final class Game {
                     });
                 }
 
-                copy.set(positionTo, removePiece.andThen(updateCounter).apply(copy.get(positionTo)));
+                copy.set(positionTo, copy.get(positionTo).updatePiece(null).updateCounter(turns.size()));
             }
 
-            copy.set(positionFrom, updateCounter.apply(copy.get(positionFrom)));
+            copy.set(positionFrom, copy.get(positionFrom).updateCounter(turns.size()));
             Collections.swap(copy, positionFrom, positionTo);
 
             // PAWN PROMOTION
-            Optional.of(positionTo).filter(p -> permanentMove).filter(p -> Game.getRank(p) == Map.of(Colour.BLACK, 7, Colour.WHITE, 0).get(getCurrentPlayer().getColor())).map(copy::get)
+            Optional.of(positionTo).filter(p -> permanent).filter(p -> UI.getRow(p) == Map.of(Colour.BLACK, 7, Colour.WHITE, 0).get(getCurrentPlayer().getColour())).map(copy::get)
                     .flatMap(Tile::getPiece).filter(Piece.Pawn.class::isInstance)
                     .map(Piece::getPlayer).filter(getCurrentPlayer()::equals).ifPresent(player -> {
 
-                final var dialog = Game.this.ui.new Promotion(player).getStored();
-
-                System.out.println("PROMOTED " + getCurrentPlayer().getColor() + " PAWN TO A " + dialog.getClass().getSimpleName().toUpperCase() + "!");
-                copy.set(positionTo, new Tile(dialog, copy.get(positionTo).counter));
+                copy.set(positionTo, copy.get(positionTo).updatePiece(new Promotion(player).getStored()));
             });
 
-            this.state = ImmutableList.copyOf(copy);
+
+            this.board = ImmutableList.copyOf(copy);
         }
 
-        public final ImmutableList<Tile> getState() {
-            return state;
-        }
-
-        final Optional<Integer> getPositionFrom() {
-            return Optional.ofNullable(positionFrom);
-        }
-
-        final Optional<Integer> getPositionTo() {
-            return Optional.ofNullable(positionTo);
-        }
-
-        final OptionalInt getPosition(final Class<? extends Piece> piece, final Player player) {
-            return IntStream.range(0, 64).filter(x -> this.state.get(x).getPiece().filter(piece::isInstance).map(Piece::getPlayer).filter(player::equals).isPresent()).findFirst();
-        }
-
-        final Game getGame() {
+        public final Game getGame()
+        {
             return Game.this;
         }
 
-        final Turn temporaryTurn(final int positionFrom, final int positionTo) {
-            return new Turn(positionFrom, positionTo, false);
+        public final Integer getPositionFrom()
+        {
+            return Optional.ofNullable(positionFrom).orElse(0);
         }
 
-        private final Function<Tile, Tile> removePiece = tile -> new Tile(null, tile.counter);
-
-        private final Function<Tile, Tile> updateCounter = tile -> new Tile(tile.piece, turns.size());
-;
-    }
-
-    /**
-     * A section of the board, holding a {@link Piece}.
-     */
-    final class Tile {
-        private final Piece piece;
-        private final Integer counter;
-
-        private Tile(final Piece piece) {
-            this.piece = piece;
-            this.counter = null;
+        public final Integer getPositionTo()
+        {
+            return Optional.ofNullable(positionTo).orElse(0);
         }
 
-        private Tile(final Piece piece, final Integer counter) {
-            this.piece = piece;
-            this.counter = counter;
+        final OptionalInt getPosition(final Class<? extends Piece> piece, final Player player) {
+            return IntStream.range(0, 64).filter(x -> this.board.get(x).getPiece().filter(piece::isInstance).map(Piece::getPlayer).filter(player::equals).isPresent()).findFirst();
         }
 
-        final Optional<Piece> getPiece() {
-            return Optional.ofNullable(piece);
+        public final ImmutableList<Tile> getBoard()
+        {
+            return board;
         }
 
-        final Optional<Integer> getCounter() {
-            return Optional.ofNullable(counter);
+        public final IntStream getPiecePositions(final Player player)
+        {
+            return board.stream().filter(x -> x.getPiece().map(Piece::getPlayer).filter(player::equals).isPresent()).mapToInt(board::indexOf);
+        }
+
+        public final Stream<Turn> getPotentialTurns(final Player player)
+        {
+            return this.getPiecePositions(player).boxed().flatMap(this::getPotentialTurns);
+        }
+
+        public final Stream<Turn> getPotentialTurns(final int positionFrom)
+        {
+            return board.get(positionFrom).getPiece().map(piece -> {
+                return piece.getVectors().flatMapToInt(vector -> {
+                    return IntStream.iterate(positionFrom + vector, Range.closedOpen(0, 64)::contains, i -> i + vector)
+                        .takeWhile(i -> piece.validVectors(i - vector, vector))
+                        .takeWhile(i -> piece.noCollide(this, positionFrom, i - vector, vector))
+                        .takeWhile(i -> piece.noError(this, positionFrom, i - vector, vector))
+                        .takeWhile(i -> piece.noCheckBeforeMoving(this, positionFrom, i - vector, vector));
+                })
+                .mapToObj(i -> new Turn(positionFrom, i, false))
+                .filter(piece::noCheckAfterMoving);
+            }).orElse(Stream.empty());
         }
     }
 }
