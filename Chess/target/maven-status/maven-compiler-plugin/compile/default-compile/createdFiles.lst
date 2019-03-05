@@ -1,12 +1,13 @@
 com\boomspring\chess\Player$AI.class
-com\boomspring\chess\Promotion.class
 com\boomspring\chess\UI$2.class
 com\boomspring\chess\Piece$Bishop.class
+com\boomspring\chess\UI$Promotion$1.class
 com\boomspring\chess\Colour.class
+com\boomspring\chess\UI$3.class
 com\boomspring\chess\Game.class
 com\boomspring\chess\Player.class
 com\boomspring\chess\Piece$King.class
-com\boomspring\chess\Promotion$1.class
+com\boomspring\chess\UI$Promotion.class
 com\boomspring\chess\Piece.class
 com\boomspring\chess\Piece$Rook.class
 com\boomspring\chess\Tile.class

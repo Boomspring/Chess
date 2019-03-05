@@ -2,107 +2,184 @@ package com.boomspring.chess;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
-public final class Game
-{
-    private final ImmutableList<Player> players = ImmutableList.of(new Player.Human(Colour.BLACK), new Player.Human(Colour.WHITE));
-    private final ArrayList<Turn> turns = new ArrayList<>(List.of(new Turn()));
-    private final AtomicReference<String> status = new AtomicReference<>();
-    private final AtomicBoolean ended = new AtomicBoolean();
+public final class Game extends Thread {
+    private final ImmutableList<Player> players;
+    private final ArrayList<Turn> turns = new ArrayList<>();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("Move").build());
+    private final AtomicReference<Integer> status = new AtomicReference<>(-1);
+    private final AtomicBoolean playable = new AtomicBoolean(true);
 
-    public final void makeMove(final int positionFrom, final int positionTo) {
-        this.getCurrentTurn().board.get(positionFrom).getPiece().map(Piece::getPlayer)
-            .filter(getCurrentPlayer()::equals)
-            .flatMap(i -> this.getCurrentTurn().getPotentialTurns(positionFrom).filter(t -> t.getPositionTo().equals(positionTo)).findFirst())
-            .map(i -> new Turn(positionFrom, positionTo, true))
-            .ifPresentOrElse(i -> {
-                turns.add(i);
-                final var kingPosition = getCurrentTurn().getPosition(Piece.King.class, getCurrentPlayer()).orElseThrow();
-
-                    // CHECK / CHECKMATE / STALEMATE
-                    switch((int) getCurrentTurn().getPotentialTurns(getNextPlayer()).mapToInt(Game.Turn::getPositionTo).filter(position -> position == kingPosition).count()) {
-                        case 0:
-                            getCurrentTurn().getPotentialTurns(getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
-                                status.set("Turn " + (turns.size() - 1) + ": Successful");
-                            }, () -> {
-                                status.set("Turn " + (turns.size() - 1) + ": Successful");
-                            });
-                            break;
-                        case 1:
-                            getCurrentTurn().getPotentialTurns(getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
-                                status.set("Turn " + (turns.size() - 1) + ": Player " + getCurrentPlayer().getColour() + " is in Check");
-                            }, () -> {
-                                status.set("Turn " + (turns.size() - 1) + ": Player " + getNextPlayer().getColour() + " Wins");
-                                ended.set(true);
-                            });
-                            break;
-                        default:
-                            getCurrentTurn().getPotentialTurns(kingPosition).findAny().ifPresentOrElse(x -> {
-                                status.set("Turn " + (turns.size() - 1) + ": Player " + getCurrentPlayer().getColour() + " is in Check");
-                            }, () -> {
-                                status.set("Turn " + (turns.size() - 1) + ": Player " + getNextPlayer().getColour() + " Wins");
-                                ended.set(true);
-                            });
-                    }
-            }, IllegalArgumentException::new);
+    protected Game(final Class<? extends Player> black, final Class<? extends Player> white)  {
+        super("Chess");
+        this.players = assignPlayers(black, white);
+        this.turns.add(new Turn());
     }
 
-    public final ImmutableList<Player> getPlayers()
+    private Game(final ImmutableList<Player> players)
     {
-        return players;
+        super("Chess");
+        this.players = players;
+        this.turns.add(new Turn());
     }
 
-    public final Player getCurrentPlayer()
+    @Override
+    public void run() {
+        while (playable.get()) {
+            try {
+                final var turn = executor.submit(this.getCurrentPlayer()).get();
+
+                UI.getInstance().getBoard().setEnabled(false);
+
+                this.getCurrentTurn().getBoard().get(turn.positionFrom).getPiece().map(Piece::getPlayer)
+                    .filter(getCurrentPlayer()::equals)
+                    .flatMap(i -> getCurrentTurn().getPotentialTurns(turn.positionFrom).filter(t -> t.getPositionTo().filter(turn.positionTo::equals).isPresent()).findFirst())
+                    .map(Turn::permanentTurn)
+                    .stream().peek(turns::add)
+                    .findFirst().ifPresentOrElse(this::setStatus, IllegalArgumentException::new);
+
+                UI.getInstance().resetBoard();
+            } catch (final Exception e) {
+                playable.set(false);
+            }
+        }
+
+        executor.shutdown();
+    }
+
+    protected final void finish()
+    {
+        executor.shutdownNow();
+        this.interrupt();
+    }
+
+    protected final Game replay()
+    {
+        return new Game(players);
+    }
+
+    private final ImmutableList<Player> assignPlayers(final Class<? extends Player> black, final Class<? extends Player> white)
+    {
+        try {
+            return ImmutableList.of(black.getDeclaredConstructor(Colour.class).newInstance(Colour.BLACK), white.getDeclaredConstructor(Colour.class).newInstance(Colour.WHITE));
+        } catch (final Exception e) {
+            return ImmutableList.of(new Player.Human(Colour.BLACK), new Player.Human(Colour.WHITE));
+        }
+    }
+
+    protected final Player getCurrentPlayer()
     {
         return players.get(turns.size() % 2);
     }
 
-    public final Player getNextPlayer()
+    protected final Player getNextPlayer()
     {
         return players.get((turns.size() + 1) % 2);
     }
 
-    public final ImmutableList<Turn> getTurns()
+
+    protected final Turn getCurrentTurn()
     {
-        return ImmutableList.copyOf(turns);
+        return Iterables.getLast(turns);
     }
 
-    public final Turn getCurrentTurn()
+    protected final int getTurnCount()
     {
-        return turns.get(turns.size() - 1);
+        return turns.size();
     }
 
-    public final Boolean hasEnded()
+    protected final String getStatus()
     {
-        return ended.get();
+        switch(status.get()) {
+            case -1: // Initial State
+                return "";
+            case 0: // Normal Turn
+                return "Turn " + (turns.size() - 1) + ": Successful";
+            case 1: // Stalemate
+                return "Turn " + (turns.size() - 1) + ": Stalemate";
+            case 2: // Current Player is in Check
+                return "Turn " + (turns.size() - 1) + ": Player " + getCurrentPlayer().getColour() + " is in Check";
+            case 3: // Next Player Wins
+                return "Turn " + (turns.size() - 1) + ": Player " + getNextPlayer().getColour() + " Wins";
+            case 4:
+                return "Turn " + (turns.size() - 1) + ": Stalemate (100 Turn Rule)";
+            default: // Exceptions
+                return null;
+        }
     }
 
-    public final String getStatus()
+    protected final void setStatus(final Turn turn)
     {
-        return status.get();
+        // 50 MOVE RULE
+        if (turns.size() >= 101 && Lists.partition(turns.subList(turns.size() - 100, turns.size()), 2).stream().filter(x -> {
+                return x.get(0).board.get(x.get(1).positionTo).getPiece().or(() -> {
+                    return x.get(0).board.get(x.get(0).positionFrom).getPiece().filter(Piece.Pawn.class::isInstance);
+                }).isPresent();
+            }).count() == 0)
+        {
+            status.set(4);
+            playable.set(false);
+            return;
+        }
+
+        final var kingPosition = getCurrentTurn().getPosition(Piece.King.class, getCurrentPlayer()).orElseThrow();
+
+        // CHECK / CHECKMATE / STALEMATE
+        switch((int) getCurrentTurn().getPotentialTurns(getNextPlayer()).mapToInt(x -> x.positionTo).filter(position -> position == kingPosition).count()) {
+            case 0:
+                getCurrentTurn().getPotentialTurns(getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
+                    status.set(0);
+                }, () -> {
+                    status.set(1);
+                    playable.set(false);
+                });
+                break;
+            case 1:
+                getCurrentTurn().getPotentialTurns(getCurrentPlayer()).findAny().ifPresentOrElse(x -> {
+                    status.set(2);
+                }, () -> {
+                    status.set(3);
+                    playable.set(false);
+                });
+                break;
+            default:
+                getCurrentTurn().getPotentialTurns(kingPosition).findAny().ifPresentOrElse(x -> {
+                    status.set(2);
+                }, () -> {
+                    status.set(3);
+                    playable.set(false);
+                });
+        }
     }
 
-    public final class Turn
+    protected final class Turn
     {
         private final Integer positionFrom;
         private final Integer positionTo;
+        private final int value;
         private final ImmutableList<Tile> board;
 
-        public Turn()
+        private Turn()
         {
             this.positionFrom = null;
             this.positionTo = null;
+            this.value = 0;
             this.board = IntStream.range(0, 64).mapToObj(i ->
             {
                 switch(i)
@@ -124,54 +201,44 @@ public final class Game
             }).map(Tile::new).collect(ImmutableList.toImmutableList());
         }
 
-        private Turn(final int positionFrom, final int positionTo, final boolean permanent)
+        protected Turn(final int positionFrom, final int positionTo, final boolean permanent)
         {
             this.positionFrom = positionFrom;
             this.positionTo = positionTo;
 
             final var copy = new ArrayList<>(getCurrentTurn().board);
 
-            if (copy.get(positionFrom).getPiece().filter(Piece.Pawn.class::isInstance).isPresent() && UI.getColumn(positionTo - positionFrom) != 0) { // DIAGONAL PAWN MOVE
+            if (copy.get(positionFrom).getPiece().filter(Piece.Pawn.class::isInstance).isPresent()) { // DIAGONAL PAWN MOVE
                 final var passant = positionTo + Map.of(9, -8, 7, -8, -7, 8, -9, 8).getOrDefault(positionTo - positionFrom, 0);
 
-                if (copy.get(positionTo).getPiece().map(Piece::getPlayer).isPresent()) { // NORMAL DIAGONAL
-                    if (permanent) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(positionTo).getPiece().orElseThrow()));
-                    copy.set(positionTo, copy.get(positionTo).updatePiece(null).updateCounter(turns.size()));
-                } else if (Optional.of(copy.get(passant))
-                        .filter(i -> Math.abs(getCurrentTurn().getPositionTo() - getCurrentTurn().getPositionFrom()) == 16)
+                if (copy.get(positionTo).getPiece().map(Piece::getPlayer).isEmpty() && Optional.of(copy.get(passant))
+                        .filter(i -> Math.abs(getCurrentTurn().getPositionTo().orElse(0) - getCurrentTurn().getPositionFrom().orElse(0)) == 16)
                         .filter(i -> i.getCounter().filter(x -> turns.size() - x == 1).isPresent())
                         .flatMap(x -> x.getPiece())
                         .filter(Piece.Pawn.class::isInstance).map(Piece::getPlayer)
                         .filter(i -> UI.getRow(positionFrom) == i.getColour().ordinal() + 3)
                         .filter(getNextPlayer()::equals).isPresent()) { // ENPASSANT DIAGONAL
 
-                    //ui.getComponents(ui.board, JLabel.class).get(passant).setOpaque(true);
-                    if (permanent) copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(x -> x.takePiece(copy.get(passant).getPiece().orElseThrow()));
-                    copy.set(passant, copy.get(passant).updatePiece(null).updateCounter(turns.size()));
+                    this.value = assignValue.apply(copy, passant);
+                } else { // NORMAL DIAGONAL OR STRAIGHT
+
+                    this.value = assignValue.apply(copy, positionTo);
                 }
             } else { // OTHER MOVES
-                if (permanent) { // REAL MOVE
-                    if (copy.get(positionFrom).getPiece().filter(Piece.King.class::isInstance).isPresent()) { // KING CASTLING
-                        switch(positionTo - positionFrom) {
-                            case 2: // RIGHT SIDE
-                                copy.set(positionTo + 1, copy.get(positionTo + 1).updateCounter(turns.size()));
-                                //ui.getComponents(ui.board, JLabel.class).get(positionTo + 1).setOpaque(true);
-                                Collections.swap(copy, positionTo + 1, positionTo - 1);
-                                break;
-                            case -2: // LEFT SIDE
-                                copy.set(positionTo - 2, copy.get(positionTo - 2).updateCounter(turns.size()));
-                                //ui.getComponents(ui.board, JLabel.class).get(positionTo -2).setOpaque(true);
-                                Collections.swap(copy, positionTo - 2, positionTo + 1);
-                                break;
-                        }
+                if (copy.get(positionFrom).getPiece().filter(Piece.King.class::isInstance).isPresent()) { // KING CASTLING
+                    switch(positionTo - positionFrom) {
+                        case 2: // RIGHT SIDE
+                            copy.set(positionTo + 1, copy.get(positionTo + 1).updateCounter(turns.size()));
+                            Collections.swap(copy, positionTo + 1, positionTo - 1);
+                            break;
+                        case -2: // LEFT SIDE
+                            copy.set(positionTo - 2, copy.get(positionTo - 2).updateCounter(turns.size()));
+                            Collections.swap(copy, positionTo - 2, positionTo + 1);
+                            break;
                     }
-
-                    copy.get(positionFrom).getPiece().map(Piece::getPlayer).ifPresent(playerFrom -> { // ADD PIECE (IF PRESENT) TO TAKEN
-                        copy.get(positionTo).getPiece().ifPresent(playerFrom::takePiece);
-                    });
                 }
 
-                copy.set(positionTo, copy.get(positionTo).updatePiece(null).updateCounter(turns.size()));
+                this.value = assignValue.apply(copy, positionTo);
             }
 
             copy.set(positionFrom, copy.get(positionFrom).updateCounter(turns.size()));
@@ -181,49 +248,47 @@ public final class Game
             Optional.of(positionTo).filter(p -> permanent).filter(p -> UI.getRow(p) == Map.of(Colour.BLACK, 7, Colour.WHITE, 0).get(getCurrentPlayer().getColour())).map(copy::get)
                     .flatMap(Tile::getPiece).filter(Piece.Pawn.class::isInstance)
                     .map(Piece::getPlayer).filter(getCurrentPlayer()::equals).ifPresent(player -> {
-
-                copy.set(positionTo, copy.get(positionTo).updatePiece(new Promotion(player).getStored()));
+                        if (Player.Human.class.isInstance(player)) {
+                            copy.set(positionTo, copy.get(positionTo).updatePiece(new UI.Promotion(player).call()));
+                        } else {
+                            copy.set(positionTo, copy.get(positionTo).updatePiece(new Piece.Queen(player)));
+                        }
             });
 
 
             this.board = ImmutableList.copyOf(copy);
         }
 
-        public final Game getGame()
-        {
-            return Game.this;
-        }
-
-        public final Integer getPositionFrom()
-        {
-            return Optional.ofNullable(positionFrom).orElse(0);
-        }
-
-        public final Integer getPositionTo()
-        {
-            return Optional.ofNullable(positionTo).orElse(0);
-        }
-
-        final OptionalInt getPosition(final Class<? extends Piece> piece, final Player player) {
+        protected final OptionalInt getPosition(final Class<? extends Piece> piece, final Player player) {
             return IntStream.range(0, 64).filter(x -> this.board.get(x).getPiece().filter(piece::isInstance).map(Piece::getPlayer).filter(player::equals).isPresent()).findFirst();
         }
 
-        public final ImmutableList<Tile> getBoard()
+        protected final Optional<Integer> getPositionFrom()
+        {
+            return Optional.ofNullable(positionFrom);
+        }
+
+        protected final Optional<Integer> getPositionTo()
+        {
+            return Optional.ofNullable(positionTo);
+        }
+
+        protected final ImmutableList<Tile> getBoard()
         {
             return board;
         }
 
-        public final IntStream getPiecePositions(final Player player)
+        private final IntStream getPiecePositions(final Player player)
         {
             return board.stream().filter(x -> x.getPiece().map(Piece::getPlayer).filter(player::equals).isPresent()).mapToInt(board::indexOf);
         }
 
-        public final Stream<Turn> getPotentialTurns(final Player player)
+        protected final Stream<Turn> getPotentialTurns(final Player player)
         {
             return this.getPiecePositions(player).boxed().flatMap(this::getPotentialTurns);
         }
 
-        public final Stream<Turn> getPotentialTurns(final int positionFrom)
+        protected final Stream<Turn> getPotentialTurns(final int positionFrom)
         {
             return board.get(positionFrom).getPiece().map(piece -> {
                 return piece.getVectors().flatMapToInt(vector -> {
@@ -236,6 +301,23 @@ public final class Game
                 .mapToObj(i -> new Turn(positionFrom, i, false))
                 .filter(piece::noCheckAfterMoving);
             }).orElse(Stream.empty());
+        }
+
+        private final BiFunction<ArrayList<Tile>, Integer, Integer> assignValue = (list, position) ->
+        {
+            final var value = list.get(position).getPiece().map(Piece::getValue).orElse(0);
+            list.set(position, list.get(position).updatePiece(null).updateCounter(turns.size()));
+            return value;
+        };
+
+        protected final int getValue()
+        {
+            return value;
+        }
+
+        private final Turn permanentTurn()
+        {
+            return new Turn(this.positionFrom, this.positionTo, true);
         }
     }
 }
