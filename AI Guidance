@@ -1,0 +1,13 @@
+For the maximising player, it should compare...
+
+Current Move - (Smallest Potential Move)
+
+If this value is greater than or equal to 0, meaning it isn't a negative action for the player to perform the move
+
+/* -------------------------------- */
+
+For the minimising player, it should compare...
+
+(Largest Potential Move) - Current Move
+
+If this value is greater than or equal to 0, meaning it isn't a negative action for the maximising player to perform the move
