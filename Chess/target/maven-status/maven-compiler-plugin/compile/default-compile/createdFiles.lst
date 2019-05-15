@@ -8,7 +8,10 @@ com\boomspring\chess\Game.class
 com\boomspring\chess\Player.class
 com\boomspring\chess\Piece$King.class
 com\boomspring\chess\UI$Promotion.class
+com\boomspring\chess\Game$1.class
 com\boomspring\chess\Piece.class
+com\boomspring\chess\Node.class
+com\boomspring\chess\Game$Rules.class
 com\boomspring\chess\Piece$Rook.class
 com\boomspring\chess\Tile.class
 com\boomspring\chess\Piece$Knight.class
@@ -16,5 +19,6 @@ com\boomspring\chess\UI.class
 com\boomspring\chess\Player$Human.class
 com\boomspring\chess\Game$Turn.class
 com\boomspring\chess\Piece$Queen.class
+com\boomspring\chess\Player$1.class
 com\boomspring\chess\UI$1.class
 com\boomspring\chess\Piece$Pawn.class
