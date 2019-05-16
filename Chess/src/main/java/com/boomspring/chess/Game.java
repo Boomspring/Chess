@@ -18,13 +18,22 @@ import com.google.common.collect.Range;
 
 public final class Game extends Thread
 {
-    private final ImmutableList<Player> players = ImmutableList.of(new Player.AI(Colour.BLACK, 3), new Player.AI(Colour.WHITE, 3));
-    private final ArrayList<Turn> turns = Lists.newArrayList(new Turn());
+    private final ImmutableList<Player> players;
+    private final ArrayList<Turn> turns;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    public Game(final String title)
+    protected Game(final String title)
     {
         super(title);
+        this.players = ImmutableList.of(new Player.AI(Colour.BLACK, 3), new Player.AI(Colour.WHITE, 3));
+        this.turns = Lists.newArrayList(new Turn());
+    }
+
+    protected Game(final String title, final ImmutableList<Player> players)
+    {
+        super(title);
+        this.players = players;
+        this.turns = Lists.newArrayList(new Turn());
     }
 
     public static final void main(final String... args) throws Exception
@@ -41,6 +50,11 @@ public final class Game extends Thread
     public final Player getNextPlayer()
     {
         return players.get((turns.size() + 1) % 2);
+    }
+
+    public final ImmutableList<Player> getPlayers()
+    {
+        return players;
     }
 
     public final ImmutableList<Turn> getTurns()

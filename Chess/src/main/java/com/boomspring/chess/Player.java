@@ -56,6 +56,7 @@ public abstract class Player implements Callable<Game.Turn>
             final List<Node> list = tree.getChildren().stream().filter(n -> n.miniMax(-10000, 10000) == value).collect(Collectors.toList());
 
             System.out.println("PLAYER: " + UI.getGame().getCurrentPlayer().getColour().name() + ", CURRENT BOARD VALUE: " + value);
+
             return list.get(random.nextInt(list.size())).getCurrentState();
         }
     }

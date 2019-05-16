@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -26,6 +27,8 @@ import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JPanel;
+
+import com.google.common.collect.ImmutableList;
 
 @SuppressWarnings("serial")
 public final class UI extends JFrame
@@ -44,25 +47,22 @@ public final class UI extends JFrame
         this.setJMenuBar(new JMenuBar());
         this.getJMenuBar().add(new JMenu("Options"));
         this.getJMenuBar().getMenu(0).add("Reset");
+        this.getJMenuBar().getMenu(0).add("Human Game");
+        this.getJMenuBar().getMenu(0).add("AI Game");
+        this.getJMenuBar().getMenu(0).add("Mixed Game");
         this.add(board);
 
         // RESET GAME BUTTON
-        this.getJMenuBar().getMenu(0).getItem(0).addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-                stored.set(null);
-                game.get().interrupt();
+        this.getJMenuBar().getMenu(0).getItem(0).addActionListener(changeGame.apply(game.get().getPlayers()));
 
-                while(game.get().isAlive())
-                {
-                    // Do NOTHING
-                }
+        // HUMAN GAME BUTTON
+        this.getJMenuBar().getMenu(0).getItem(1).addActionListener(changeGame.apply(ImmutableList.of(new Player.Human(Colour.BLACK), new Player.Human(Colour.WHITE))));
 
-                game.set(new Game("Chess"));
-                game.get().start();
-                UI.refreshBoard();
-			}
-        });
+        // AI GAME BUTTON
+        this.getJMenuBar().getMenu(0).getItem(2).addActionListener(changeGame.apply(ImmutableList.of(new Player.AI(Colour.BLACK, 3), new Player.AI(Colour.WHITE, 3))));
+
+        // MIXED GAME BUTTON
+        this.getJMenuBar().getMenu(0).getItem(3).addActionListener(changeGame.apply(ImmutableList.of(new Player.AI(Colour.BLACK, 3), new Player.Human(Colour.WHITE))));
 
         IntStream.range(0, 64).mapToObj(i -> game.get().getCurrentTurn().getBoard().get(i).getPiece().map(Piece::toString).orElse("--")).map(JButton::new).peek(board::add).forEach(x -> {
             x.setHorizontalAlignment(0);
@@ -169,6 +169,23 @@ public final class UI extends JFrame
             }
         }
     }
+
+    private final Function<ImmutableList<Player>, ActionListener> changeGame = players -> new ActionListener() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            stored.set(null);
+            game.get().interrupt();
+
+            while(game.get().isAlive())
+            {
+                // Do NOTHING
+            }
+
+            game.set(new Game("Chess", players));
+            game.get().start();
+            UI.refreshBoard();
+        }
+    };
 
     protected static final class Promotion extends JDialog implements Callable<Piece> {
         private final AtomicReference<Piece> piece = new AtomicReference<>();
